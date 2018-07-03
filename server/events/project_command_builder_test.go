@@ -12,8 +12,8 @@ import (
 	vcsmocks "github.com/runatlantis/atlantis/server/events/vcs/mocks"
 	"github.com/runatlantis/atlantis/server/events/yaml"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestDefaultProjectCommandBuilder_BuildAutoplanCommands(t *testing.T) {
@@ -176,7 +176,7 @@ projects:
 			baseRepo := models.Repo{}
 			headRepo := models.Repo{}
 			pull := models.PullRequest{}
-			logger := logging.NewNoopLogger()
+			logger := log.New()
 			workingDir := mocks.NewMockWorkingDir()
 			When(workingDir.Clone(logger, baseRepo, headRepo, pull, "default")).ThenReturn(tmpDir, nil)
 			if c.AtlantisYAML != "" {
@@ -203,7 +203,7 @@ projects:
 				HeadRepo: headRepo,
 				Pull:     pull,
 				User:     models.User{},
-				Log:      logger,
+				Logger:   logger,
 			})
 			Ok(t, err)
 			Equals(t, len(c.exp), len(ctxs))
@@ -393,7 +393,7 @@ projects:
 				baseRepo := models.Repo{}
 				headRepo := models.Repo{}
 				pull := models.PullRequest{}
-				logger := logging.NewNoopLogger()
+				logger := log.New()
 				workingDir := mocks.NewMockWorkingDir()
 				if cmdName == events.Plan {
 					When(workingDir.Clone(logger, baseRepo, headRepo, pull, c.Cmd.Workspace)).ThenReturn(tmpDir, nil)
@@ -424,7 +424,7 @@ projects:
 					HeadRepo: headRepo,
 					Pull:     pull,
 					User:     models.User{},
-					Log:      logger,
+					Logger:   logger,
 				}
 				var actCtx models.ProjectCommandContext
 

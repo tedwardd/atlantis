@@ -8,8 +8,8 @@ import (
 	"github.com/runatlantis/atlantis/server/events/models"
 	"github.com/runatlantis/atlantis/server/events/runtime"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestRunStepRunner_Run(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRunStepRunner_Run(t *testing.T) {
 		DefaultTFVersion: defaultVersion,
 	}
 	ctx := models.ProjectCommandContext{
-		Log:        logging.NewNoopLogger(),
+		Log:        log.New(),
 		Workspace:  "myworkspace",
 		RepoRelDir: "mydir",
 		ProjectConfig: &valid.Project{

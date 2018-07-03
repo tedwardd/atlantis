@@ -19,7 +19,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,6 +44,7 @@ import (
 	"github.com/runatlantis/atlantis/server/static"
 	"github.com/urfave/cli"
 	"github.com/urfave/negroni"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 const (
@@ -64,7 +64,7 @@ type Server struct {
 	Router             *mux.Router
 	Port               int
 	CommandRunner      *events.DefaultCommandRunner
-	Logger             *logging.SimpleLogger
+	Logger             log.Logger
 	Locker             locking.Locker
 	AtlantisURL        string
 	EventsController   *EventsController
@@ -128,7 +128,7 @@ type WebhookConfig struct {
 // NewServer returns a new server. If there are issues starting the server or
 // its dependencies an error will be returned. This is like the main() function
 // for the server CLI command because it injects all the dependencies.
-func NewServer(userConfig UserConfig, config Config) (*Server, error) {
+func NewServer(userConfig UserConfig, config Config, logger log.Logger) (*Server, error) {
 	var supportedVCSHosts []models.VCSHostType
 	var githubClient *vcs.GithubClient
 	var gitlabClient *vcs.GitlabClient
@@ -209,7 +209,12 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		Locker:     lockingClient,
 		WorkingDir: workingDir,
 	}
-	logger := logging.NewSimpleLogger("server", nil, false, logging.ToLogLevel(userConfig.LogLevel))
+	// This logger logs at a specific level and includes the filename/number.
+	logger.SetHandler(
+		log.LvlFilterHandler(
+			logging.ToLogLvl(userConfig.LogLevel),
+			log.CallerFileHandler(logger.GetHandler())))
+
 	eventParser := &events.EventParser{
 		GithubUser:  userConfig.GithubUser,
 		GithubToken: userConfig.GithubToken,
@@ -230,7 +235,6 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		CommitStatusUpdater:      commitStatusUpdater,
 		EventParser:              eventParser,
 		MarkdownRenderer:         markdownRenderer,
-		Logger:                   logger,
 		AllowForkPRs:             userConfig.AllowForkPRs,
 		AllowForkPRsFlag:         config.AllowForkPRsFlag,
 		ProjectCommandBuilder: &events.DefaultProjectCommandBuilder{
@@ -319,8 +323,8 @@ func (s *Server) Start() error {
 	s.Router.HandleFunc("/locks", s.LocksController.DeleteLock).Methods("DELETE").Queries("id", "{id:.*}")
 	s.Router.HandleFunc("/lock", s.LocksController.GetLock).Methods("GET").
 		Queries(LockViewRouteIDQueryParam, fmt.Sprintf("{%s}", LockViewRouteIDQueryParam)).Name(LockViewRouteName)
-	n := negroni.New(&negroni.Recovery{
-		Logger:     log.New(os.Stdout, "", log.LstdFlags),
+	n := negroni.New(&Recovery{
+		Logger:     s.Logger,
 		PrintStack: false,
 		StackAll:   false,
 		StackSize:  1024 * 8,
@@ -334,7 +338,7 @@ func (s *Server) Start() error {
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", s.Port), Handler: n}
 	go func() {
-		s.Logger.Warn("Atlantis started - listening on port %v", s.Port)
+		s.Logger.Warn("Atlantis started", "port", s.Port)
 
 		var err error
 		if s.SSLCertFile != "" && s.SSLKeyFile != "" {
@@ -343,15 +347,15 @@ func (s *Server) Start() error {
 			err = server.ListenAndServe()
 		}
 
-		if err != nil {
-			// When shutdown safely, there will be no error.
-			s.Logger.Err(err.Error())
+		if err != nil && err != http.ErrServerClosed {
+			s.Logger.Error(err.Error())
 		}
 	}()
 	<-stop
 
 	s.Logger.Warn("Received interrupt. Safely shutting down")
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second) // nolint: vet
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // nolint: vet
+	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
 		return cli.NewExitError(fmt.Sprintf("while shutting down: %s", err), 1)
 	}

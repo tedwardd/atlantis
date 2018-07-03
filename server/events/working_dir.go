@@ -14,15 +14,17 @@
 package events
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/pkg/errors"
 	"github.com/runatlantis/atlantis/server/events/models"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 const workingDirPrefix = "repos"
@@ -33,7 +35,7 @@ const workingDirPrefix = "repos"
 type WorkingDir interface {
 	// Clone git clones headRepo, checks out the branch and then returns the
 	// absolute path to the root of the cloned repo.
-	Clone(log *logging.SimpleLogger, baseRepo models.Repo, headRepo models.Repo, p models.PullRequest, workspace string) (string, error)
+	Clone(log log.Logger, baseRepo models.Repo, headRepo models.Repo, p models.PullRequest, workspace string) (string, error)
 	// GetWorkingDir returns the path to the workspace for this repo and pull.
 	// If workspace does not exist on disk, error will be of type os.IsNotExist.
 	GetWorkingDir(r models.Repo, p models.PullRequest, workspace string) (string, error)
@@ -55,7 +57,7 @@ type FileWorkspace struct {
 // the right commit it does nothing. This is to support running commands in
 // multiple dirs of the same repo without deleting existing plans.
 func (w *FileWorkspace) Clone(
-	log *logging.SimpleLogger,
+	logger log.Logger,
 	baseRepo models.Repo,
 	headRepo models.Repo,
 	p models.PullRequest,
@@ -65,28 +67,28 @@ func (w *FileWorkspace) Clone(
 	// If the directory already exists, check if it's at the right commit.
 	// If so, then we do nothing.
 	if _, err := os.Stat(cloneDir); err == nil {
-		log.Debug("clone directory %q already exists, checking if it's at the right commit", cloneDir)
+		logger.Debug(fmt.Sprintf("clone directory %q already exists, checking if it's at the right commit", cloneDir))
 		revParseCmd := exec.Command("git", "rev-parse", "HEAD") // #nosec
 		revParseCmd.Dir = cloneDir
 		output, err := revParseCmd.CombinedOutput()
 		if err != nil {
-			log.Err("will re-clone repo, could not determine if was at correct commit: git rev-parse HEAD: %s: %s", err, string(output))
-			return w.forceClone(log, cloneDir, headRepo, p)
+			logger.Error("will re-clone repo, could not determine if was at correct commit", "command", "git rev-parse HEAD", "err", err, "output", string(output))
+			return w.forceClone(logger, cloneDir, headRepo, p)
 		}
 		currCommit := strings.Trim(string(output), "\n")
 		if currCommit == p.HeadCommit {
-			log.Debug("repo is at correct commit %q so will not re-clone", p.HeadCommit)
+			logger.Debug(fmt.Sprintf("repo is at correct commit %q so will not re-clone", p.HeadCommit))
 			return cloneDir, nil
 		}
-		log.Debug("repo was already cloned but is not at correct commit, wanted %q got %q", p.HeadCommit, currCommit)
+		logger.Debug(fmt.Sprintf("repo was already cloned but is not at correct commit, wanted %q got %q", p.HeadCommit, currCommit))
 		// We'll fall through to re-clone.
 	}
 
 	// Otherwise we clone the repo.
-	return w.forceClone(log, cloneDir, headRepo, p)
+	return w.forceClone(logger, cloneDir, headRepo, p)
 }
 
-func (w *FileWorkspace) forceClone(log *logging.SimpleLogger,
+func (w *FileWorkspace) forceClone(log log.Logger,
 	cloneDir string,
 	headRepo models.Repo,
 	p models.PullRequest) (string, error) {

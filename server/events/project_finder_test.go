@@ -21,11 +21,11 @@ import (
 
 	"github.com/runatlantis/atlantis/server/events"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
-var noopLogger = logging.NewNoopLogger()
+var noopLogger = log.New()
 var modifiedRepo = "owner/repo"
 var m = events.DefaultProjectFinder{}
 var nestedModules1 string
@@ -370,7 +370,7 @@ func TestDefaultProjectFinder_DetermineProjectsViaConfig(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.description, func(t *testing.T) {
 			pf := events.DefaultProjectFinder{}
-			projects, err := pf.DetermineProjectsViaConfig(logging.NewNoopLogger(), c.modified, c.config, tmpDir)
+			projects, err := pf.DetermineProjectsViaConfig(log.New(), c.modified, c.config, tmpDir)
 			Ok(t, err)
 			Equals(t, len(c.expProjPaths), len(projects))
 			for i, proj := range projects {

@@ -14,8 +14,9 @@
 package events
 
 import (
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/runatlantis/atlantis/server/events/models"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 // CommandContext represents the context of a command that should be executed
@@ -30,6 +31,6 @@ type CommandContext struct {
 	HeadRepo models.Repo
 	Pull     models.PullRequest
 	// User is the user that triggered this command.
-	User models.User
-	Log  *logging.SimpleLogger
+	User   models.User
+	Logger log.Logger
 }

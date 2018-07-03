@@ -16,8 +16,8 @@ import (
 	mocks2 "github.com/runatlantis/atlantis/server/events/mocks"
 	"github.com/runatlantis/atlantis/server/events/models"
 	vcsmocks "github.com/runatlantis/atlantis/server/events/vcs/mocks"
-	"github.com/runatlantis/atlantis/server/logging"
 	sMocks "github.com/runatlantis/atlantis/server/mocks"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func AnyRepo() models.Repo {
@@ -30,7 +30,7 @@ func TestGetLockRoute_NoLockID(t *testing.T) {
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	w := httptest.NewRecorder()
 	lc := server.LocksController{
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 	}
 	lc.GetLock(w, req)
 	responseContains(t, w, http.StatusBadRequest, "No lock id in request")
@@ -39,7 +39,7 @@ func TestGetLockRoute_NoLockID(t *testing.T) {
 func TestGetLock_InvalidLockID(t *testing.T) {
 	t.Log("If the lock ID is invalid then we should get a 400")
 	lc := server.LocksController{
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req = mux.SetURLVars(req, map[string]string{"id": "%A@"})
@@ -54,7 +54,7 @@ func TestGetLock_LockerErr(t *testing.T) {
 	l := mocks.NewMockLocker()
 	When(l.GetLock("id")).ThenReturn(nil, errors.New("err"))
 	lc := server.LocksController{
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 		Locker: l,
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
@@ -70,7 +70,7 @@ func TestGetLock_None(t *testing.T) {
 	l := mocks.NewMockLocker()
 	When(l.GetLock("id")).ThenReturn(nil, nil)
 	lc := server.LocksController{
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 		Locker: l,
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
@@ -91,7 +91,7 @@ func TestGetLock_Success(t *testing.T) {
 	}, nil)
 	tmpl := sMocks.NewMockTemplateWriter()
 	lc := server.LocksController{
-		Logger:             logging.NewNoopLogger(),
+		Logger:             log.New(),
 		Locker:             l,
 		LockDetailTemplate: tmpl,
 		AtlantisVersion:    "1300135",
@@ -117,14 +117,14 @@ func TestDeleteLock_NoLockID(t *testing.T) {
 	t.Log("If there is no lock ID in the request then we should get a 400")
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	w := httptest.NewRecorder()
-	lc := server.LocksController{Logger: logging.NewNoopLogger()}
+	lc := server.LocksController{Logger: log.New()}
 	lc.DeleteLock(w, req)
 	responseContains(t, w, http.StatusBadRequest, "No lock id in request")
 }
 
 func TestDeleteLock_InvalidLockID(t *testing.T) {
 	t.Log("If the lock ID is invalid then we should get a 400")
-	lc := server.LocksController{Logger: logging.NewNoopLogger()}
+	lc := server.LocksController{Logger: log.New()}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req = mux.SetURLVars(req, map[string]string{"id": "%A@"})
 	w := httptest.NewRecorder()
@@ -139,7 +139,7 @@ func TestDeleteLock_LockerErr(t *testing.T) {
 	When(l.Unlock("id")).ThenReturn(nil, errors.New("err"))
 	lc := server.LocksController{
 		Locker: l,
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req = mux.SetURLVars(req, map[string]string{"id": "id"})
@@ -155,7 +155,7 @@ func TestDeleteLock_None(t *testing.T) {
 	When(l.Unlock("id")).ThenReturn(nil, nil)
 	lc := server.LocksController{
 		Locker: l,
-		Logger: logging.NewNoopLogger(),
+		Logger: log.New(),
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
 	req = mux.SetURLVars(req, map[string]string{"id": "id"})
@@ -173,7 +173,7 @@ func TestDeleteLock_OldFormat(t *testing.T) {
 	When(l.Unlock("id")).ThenReturn(&models.ProjectLock{}, nil)
 	lc := server.LocksController{
 		Locker:    l,
-		Logger:    logging.NewNoopLogger(),
+		Logger:    log.New(),
 		VCSClient: cp,
 	}
 	req, _ := http.NewRequest("GET", "", bytes.NewBuffer(nil))
@@ -200,7 +200,7 @@ func TestDeleteLock_CommentFailed(t *testing.T) {
 	}, nil)
 	lc := server.LocksController{
 		Locker:           l,
-		Logger:           logging.NewNoopLogger(),
+		Logger:           log.New(),
 		VCSClient:        cp,
 		WorkingDir:       workingDir,
 		WorkingDirLocker: workingDirLocker,
@@ -233,7 +233,7 @@ func TestDeleteLock_CommentSuccess(t *testing.T) {
 	}, nil)
 	lc := server.LocksController{
 		Locker:           l,
-		Logger:           logging.NewNoopLogger(),
+		Logger:           log.New(),
 		VCSClient:        cp,
 		WorkingDirLocker: workingDirLocker,
 		WorkingDir:       workingDir,

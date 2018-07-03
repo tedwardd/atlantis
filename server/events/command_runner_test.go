@@ -14,11 +14,12 @@
 package events_test
 
 import (
-	"bytes"
 	"errors"
-	"log"
 	"strings"
 	"testing"
+
+	"github.com/runatlantis/atlantis/server/logging"
+	log "gopkg.in/inconshreveable/log15.v2"
 
 	"github.com/google/go-github/github"
 	. "github.com/petergtz/pegomock"
@@ -29,7 +30,6 @@ import (
 	"github.com/runatlantis/atlantis/server/events/models/fixtures"
 	"github.com/runatlantis/atlantis/server/events/vcs"
 	vcsmocks "github.com/runatlantis/atlantis/server/events/vcs/mocks"
-	logmocks "github.com/runatlantis/atlantis/server/logging/mocks"
 	. "github.com/runatlantis/atlantis/testing"
 )
 
@@ -40,7 +40,8 @@ var ghStatus *mocks.MockCommitStatusUpdater
 var githubGetter *mocks.MockGithubPullGetter
 var gitlabGetter *mocks.MockGitlabMergeRequestGetter
 var ch events.DefaultCommandRunner
-var logBytes *bytes.Buffer
+var historyHandler logging.HistoryHandler
+var historyLogger log.Logger
 
 func setup(t *testing.T) {
 	RegisterMockTestingT(t)
@@ -50,10 +51,10 @@ func setup(t *testing.T) {
 	vcsClient = vcsmocks.NewMockClientProxy()
 	githubGetter = mocks.NewMockGithubPullGetter()
 	gitlabGetter = mocks.NewMockGitlabMergeRequestGetter()
-	logger := logmocks.NewMockSimpleLogging()
-	logBytes = new(bytes.Buffer)
+	historyLogger = log.New()
+	historyHandler = logging.HistoryHandler{DefaultHandler: log.DiscardHandler()}
+	historyLogger.SetHandler(&historyHandler)
 	projectCommandRunner := mocks.NewMockProjectCommandRunner()
-	When(logger.Underlying()).ThenReturn(log.New(logBytes, "", 0))
 	ch = events.DefaultCommandRunner{
 		VCSClient:                vcsClient,
 		CommitStatusUpdater:      ghStatus,
@@ -61,11 +62,10 @@ func setup(t *testing.T) {
 		MarkdownRenderer:         &events.MarkdownRenderer{},
 		GithubPullGetter:         githubGetter,
 		GitlabMergeRequestGetter: gitlabGetter,
-		Logger:                logger,
-		AllowForkPRs:          false,
-		AllowForkPRsFlag:      "allow-fork-prs-flag",
-		ProjectCommandBuilder: projectCommandBuilder,
-		ProjectCommandRunner:  projectCommandRunner,
+		AllowForkPRs:             false,
+		AllowForkPRsFlag:         "allow-fork-prs-flag",
+		ProjectCommandBuilder:    projectCommandBuilder,
+		ProjectCommandRunner:     projectCommandRunner,
 	}
 }
 
@@ -75,7 +75,7 @@ func TestRunCommentCommand_LogPanics(t *testing.T) {
 	ch.AllowForkPRs = true // Lets us get to the panic code.
 	defer func() { ch.AllowForkPRs = false }()
 	When(ghStatus.Update(fixtures.GithubRepo, fixtures.Pull, vcs.Pending, events.Plan)).ThenPanic("panic")
-	ch.RunCommentCommand(fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, 1, nil)
+	ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, 1, nil)
 	_, _, comment := vcsClient.VerifyWasCalledOnce().CreateComment(matchers.AnyModelsRepo(), AnyInt(), AnyString()).GetCapturedArguments()
 	Assert(t, strings.Contains(comment, "Error: goroutine panic"), "comment should be about a goroutine panic")
 }
@@ -84,32 +84,41 @@ func TestRunCommentCommand_NoGithubPullGetter(t *testing.T) {
 	t.Log("if DefaultCommandRunner was constructed with a nil GithubPullGetter an error should be logged")
 	setup(t)
 	ch.GithubPullGetter = nil
-	ch.RunCommentCommand(fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, 1, nil)
-	Equals(t, "[ERROR] runatlantis/atlantis#1: Atlantis not configured to support GitHub\n", logBytes.String())
+	logger := historyLogger
+	ch.RunCommentCommand(logger, fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, 1, nil)
+	exp := "Atlantis not configured to support GitHub"
+	act := historyHandler.History.String()
+	Assert(t, strings.Contains(act, exp), "exp %q in %q", exp, act)
 }
 
 func TestRunCommentCommand_NoGitlabMergeGetter(t *testing.T) {
 	t.Log("if DefaultCommandRunner was constructed with a nil GitlabMergeRequestGetter an error should be logged")
 	setup(t)
 	ch.GitlabMergeRequestGetter = nil
-	ch.RunCommentCommand(fixtures.GitlabRepo, &fixtures.GitlabRepo, fixtures.User, 1, nil)
-	Equals(t, "[ERROR] runatlantis/atlantis#1: Atlantis not configured to support GitLab\n", logBytes.String())
+	ch.RunCommentCommand(historyLogger, fixtures.GitlabRepo, &fixtures.GitlabRepo, fixtures.User, 1, nil)
+	exp := "Atlantis not configured to support GitLab"
+	act := historyHandler.History.String()
+	Assert(t, strings.Contains(act, exp), "exp %q in %q", exp, act)
 }
 
 func TestRunCommentCommand_GithubPullErr(t *testing.T) {
 	t.Log("if getting the github pull request fails an error should be logged")
 	setup(t)
 	When(githubGetter.GetPullRequest(fixtures.GithubRepo, fixtures.Pull.Num)).ThenReturn(nil, errors.New("err"))
-	ch.RunCommentCommand(fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
-	Equals(t, "[ERROR] runatlantis/atlantis#1: Making pull request API call to GitHub: err\n", logBytes.String())
+	ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
+	exp := "making pull request API call to GitHub: err"
+	act := historyHandler.History.String()
+	Assert(t, strings.Contains(act, exp), "exp %q in %q", exp, act)
 }
 
 func TestRunCommentCommand_GitlabMergeRequestErr(t *testing.T) {
 	t.Log("if getting the gitlab merge request fails an error should be logged")
 	setup(t)
 	When(gitlabGetter.GetMergeRequest(fixtures.GithubRepo.FullName, fixtures.Pull.Num)).ThenReturn(nil, errors.New("err"))
-	ch.RunCommentCommand(fixtures.GitlabRepo, &fixtures.GitlabRepo, fixtures.User, fixtures.Pull.Num, nil)
-	Equals(t, "[ERROR] runatlantis/atlantis#1: Making merge request API call to GitLab: err\n", logBytes.String())
+	ch.RunCommentCommand(historyLogger, fixtures.GitlabRepo, &fixtures.GitlabRepo, fixtures.User, fixtures.Pull.Num, nil)
+	exp := "making merge request API call to GitLab: err"
+	act := historyHandler.History.String()
+	Assert(t, strings.Contains(act, exp), "exp %q in %q", exp, act)
 }
 
 func TestRunCommentCommand_GithubPullParseErr(t *testing.T) {
@@ -119,8 +128,10 @@ func TestRunCommentCommand_GithubPullParseErr(t *testing.T) {
 	When(githubGetter.GetPullRequest(fixtures.GithubRepo, fixtures.Pull.Num)).ThenReturn(&pull, nil)
 	When(eventParsing.ParseGithubPull(&pull)).ThenReturn(fixtures.Pull, fixtures.GithubRepo, fixtures.GitlabRepo, errors.New("err"))
 
-	ch.RunCommentCommand(fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
-	Equals(t, "[ERROR] runatlantis/atlantis#1: Extracting required fields from comment data: err\n", logBytes.String())
+	ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
+	exp := "extracting required fields from comment data: err"
+	act := historyHandler.History.String()
+	Assert(t, strings.Contains(act, exp), "exp %q in %q", exp, act)
 }
 
 func TestRunCommentCommand_ForkPRDisabled(t *testing.T) {
@@ -137,7 +148,7 @@ func TestRunCommentCommand_ForkPRDisabled(t *testing.T) {
 	headRepo.Owner = "forkrepo"
 	When(eventParsing.ParseGithubPull(&pull)).ThenReturn(modelPull, modelPull.BaseRepo, headRepo, nil)
 
-	ch.RunCommentCommand(fixtures.GithubRepo, nil, fixtures.User, fixtures.Pull.Num, nil)
+	ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, nil, fixtures.User, fixtures.Pull.Num, nil)
 	vcsClient.VerifyWasCalledOnce().CreateComment(fixtures.GithubRepo, modelPull.Num, "Atlantis commands can't be run on fork pull requests. To enable, set --"+ch.AllowForkPRsFlag)
 }
 
@@ -152,7 +163,7 @@ func TestRunCommentCommand_ClosedPull(t *testing.T) {
 	When(githubGetter.GetPullRequest(fixtures.GithubRepo, fixtures.Pull.Num)).ThenReturn(pull, nil)
 	When(eventParsing.ParseGithubPull(pull)).ThenReturn(modelPull, modelPull.BaseRepo, fixtures.GithubRepo, nil)
 
-	ch.RunCommentCommand(fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
+	ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, &fixtures.GithubRepo, fixtures.User, fixtures.Pull.Num, nil)
 	vcsClient.VerifyWasCalledOnce().CreateComment(fixtures.GithubRepo, modelPull.Num, "Atlantis commands can't be run on closed pull requests")
 }
 
@@ -182,7 +193,7 @@ func TestRunCommentCommand_FullRun(t *testing.T) {
 			When(projectCommandBuilder.BuildApplyCommand(matchers.AnyPtrToEventsCommandContext(), matchers.AnyPtrToEventsCommentCommand())).ThenReturn(cmdCtx, nil)
 		}
 
-		ch.RunCommentCommand(fixtures.GithubRepo, nil, fixtures.User, fixtures.Pull.Num, cmd)
+		ch.RunCommentCommand(historyLogger, fixtures.GithubRepo, nil, fixtures.User, fixtures.Pull.Num, cmd)
 
 		ghStatus.VerifyWasCalledOnce().Update(fixtures.GithubRepo, fixtures.Pull, vcs.Pending, c)
 		_, _, response := ghStatus.VerifyWasCalledOnce().UpdateProjectResult(matchers.AnyPtrToEventsCommandContext(), matchers.AnyEventsCommandName(), matchers.AnyEventsCommandResult()).GetCapturedArguments()
@@ -202,7 +213,7 @@ func TestRunAutoplanCommands(t *testing.T) {
 	}
 	setup(t)
 	When(projectCommandBuilder.BuildAutoplanCommands(matchers.AnyPtrToEventsCommandContext())).ThenReturn([]models.ProjectCommandContext{{RepoRelDir: ".", Workspace: "default"}}, nil)
-	ch.RunAutoplanCommand(fixtures.GithubRepo, fixtures.GithubRepo, fixtures.Pull, fixtures.User)
+	ch.RunAutoplanCommand(log.New(), fixtures.GithubRepo, fixtures.GithubRepo, fixtures.Pull, fixtures.User)
 
 	ghStatus.VerifyWasCalledOnce().Update(fixtures.GithubRepo, fixtures.Pull, vcs.Pending, events.Plan)
 	_, _, response := ghStatus.VerifyWasCalledOnce().UpdateProjectResult(matchers.AnyPtrToEventsCommandContext(), matchers.AnyEventsCommandName(), matchers.AnyEventsCommandResult()).GetCapturedArguments()

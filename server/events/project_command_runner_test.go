@@ -25,8 +25,8 @@ import (
 	"github.com/runatlantis/atlantis/server/events/models"
 	mocks2 "github.com/runatlantis/atlantis/server/events/runtime/mocks"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestDefaultProjectCommandRunner_Plan(t *testing.T) {
@@ -166,7 +166,7 @@ func TestDefaultProjectCommandRunner_Plan(t *testing.T) {
 			}, nil)
 
 			ctx := models.ProjectCommandContext{
-				Log:           logging.NewNoopLogger(),
+				Log:           log.New(),
 				ProjectConfig: c.projCfg,
 				Workspace:     "default",
 				GlobalConfig:  c.globalCfg,
@@ -374,7 +374,7 @@ func TestDefaultProjectCommandRunner_Apply(t *testing.T) {
 			)).ThenReturn(repoDir, nil)
 
 			ctx := models.ProjectCommandContext{
-				Log:           logging.NewNoopLogger(),
+				Log:           log.New(),
 				ProjectConfig: c.projCfg,
 				Workspace:     "default",
 				GlobalConfig:  c.globalCfg,

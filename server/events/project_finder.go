@@ -19,11 +19,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/pkg/errors"
 	"github.com/runatlantis/atlantis/server/events/models"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_project_finder.go ProjectFinder
@@ -32,8 +33,8 @@ import (
 type ProjectFinder interface {
 	// DetermineProjects returns the list of projects that were modified based on
 	// the modifiedFiles. The list will be de-duplicated.
-	DetermineProjects(log *logging.SimpleLogger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project
-	DetermineProjectsViaConfig(log *logging.SimpleLogger, modifiedFiles []string, config valid.Config, repoDir string) ([]valid.Project, error)
+	DetermineProjects(log log.Logger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project
+	DetermineProjectsViaConfig(log log.Logger, modifiedFiles []string, config valid.Config, repoDir string) ([]valid.Project, error)
 }
 
 // DefaultProjectFinder implements ProjectFinder.
@@ -43,7 +44,7 @@ var excludeList = []string{"terraform.tfstate", "terraform.tfstate.backup"}
 
 // DetermineProjects returns the list of projects that were modified based on
 // the modifiedFiles. The list will be de-duplicated.
-func (p *DefaultProjectFinder) DetermineProjects(log *logging.SimpleLogger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project {
+func (p *DefaultProjectFinder) DetermineProjects(log log.Logger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project {
 	var projects []models.Project
 
 	modifiedTerraformFiles := p.filterToTerraform(modifiedFiles)
@@ -76,7 +77,7 @@ func (p *DefaultProjectFinder) DetermineProjects(log *logging.SimpleLogger, modi
 	return projects
 }
 
-func (p *DefaultProjectFinder) DetermineProjectsViaConfig(log *logging.SimpleLogger, modifiedFiles []string, config valid.Config, repoDir string) ([]valid.Project, error) {
+func (p *DefaultProjectFinder) DetermineProjectsViaConfig(log log.Logger, modifiedFiles []string, config valid.Config, repoDir string) ([]valid.Project, error) {
 	var projects []valid.Project
 	for _, project := range config.Projects {
 		log.Debug("checking if project at dir %q workspace %q was modified", project.Dir, project.Workspace)

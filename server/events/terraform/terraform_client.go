@@ -24,14 +24,14 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
-	"github.com/runatlantis/atlantis/server/logging"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_terraform_client.go Client
 
 type Client interface {
 	Version() *version.Version
-	RunCommandWithVersion(log *logging.SimpleLogger, path string, args []string, v *version.Version, workspace string) (string, error)
+	RunCommandWithVersion(log log.Logger, path string, args []string, v *version.Version, workspace string) (string, error)
 }
 
 type DefaultClient struct {
@@ -86,7 +86,7 @@ func (c *DefaultClient) Version() *version.Version {
 // If v is nil, will use the default version.
 // Workspace is the terraform workspace to run in. We won't switch workspaces
 // but will set the TERRAFORM_WORKSPACE environment variable.
-func (c *DefaultClient) RunCommandWithVersion(log *logging.SimpleLogger, path string, args []string, v *version.Version, workspace string) (string, error) {
+func (c *DefaultClient) RunCommandWithVersion(logger log.Logger, path string, args []string, v *version.Version, workspace string) (string, error) {
 	tfExecutable := "terraform"
 	tfVersionStr := c.defaultVersion.String()
 	// if version is the same as the default, don't need to prepend the version name to the executable
@@ -122,10 +122,10 @@ func (c *DefaultClient) RunCommandWithVersion(log *logging.SimpleLogger, path st
 	commandStr := strings.Join(terraformCmd.Args, " ")
 	if err != nil {
 		err = fmt.Errorf("%s: running %q in %q: \n%s", err, commandStr, path, out)
-		log.Debug("error: %s", err)
+		logger.Debug("error", "err", err)
 		return string(out), err
 	}
-	log.Info("successfully ran %q in %q", commandStr, path)
+	logger.Info("successfully command", "command", commandStr, "path", path)
 	return string(out), nil
 }
 

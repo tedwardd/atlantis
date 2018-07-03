@@ -33,9 +33,9 @@ import (
 	"github.com/runatlantis/atlantis/server/events/mocks/matchers"
 	"github.com/runatlantis/atlantis/server/events/models"
 	vcsmocks "github.com/runatlantis/atlantis/server/events/vcs/mocks"
-	"github.com/runatlantis/atlantis/server/logging"
 	"github.com/runatlantis/atlantis/server/mocks"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 const githubHeader = "X-Github-Event"
@@ -153,7 +153,7 @@ func TestPost_GitlabCommentInvalidCommand(t *testing.T) {
 	When(cp.Parse("", models.Gitlab)).ThenReturn(events.CommentParseResult{Ignore: true})
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusOK, "Ignoring non-command comment: \"\"")
+	responseContains(t, w, http.StatusOK, "Ignoring non-command")
 }
 
 func TestPost_GithubCommentInvalidCommand(t *testing.T) {
@@ -167,7 +167,7 @@ func TestPost_GithubCommentInvalidCommand(t *testing.T) {
 	When(cp.Parse("", models.Github)).ThenReturn(events.CommentParseResult{Ignore: true})
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusOK, "Ignoring non-command comment: \"\"")
+	responseContains(t, w, http.StatusOK, "Ignoring non-command")
 }
 
 func TestPost_GitlabCommentNotWhitelisted(t *testing.T) {
@@ -175,7 +175,7 @@ func TestPost_GitlabCommentNotWhitelisted(t *testing.T) {
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClientProxy()
 	e := server.EventsController{
-		Logger:                       logging.NewNoopLogger(),
+		Logger:                       log.New(),
 		CommentParser:                &events.CommentParser{},
 		GitlabRequestParserValidator: &server.DefaultGitlabRequestParserValidator{},
 		Parser:               &events.EventParser{},
@@ -203,7 +203,7 @@ func TestPost_GithubCommentNotWhitelisted(t *testing.T) {
 	RegisterMockTestingT(t)
 	vcsClient := vcsmocks.NewMockClientProxy()
 	e := server.EventsController{
-		Logger:                 logging.NewNoopLogger(),
+		Logger:                 log.New(),
 		GithubRequestValidator: &server.DefaultGithubRequestValidator{},
 		CommentParser:          &events.CommentParser{},
 		Parser:                 &events.EventParser{},
@@ -268,7 +268,7 @@ func TestPost_GitlabCommentSuccess(t *testing.T) {
 	e.Post(w, req)
 	responseContains(t, w, http.StatusOK, "Processing...")
 
-	cr.VerifyWasCalledOnce().RunCommentCommand(models.Repo{}, &models.Repo{}, models.User{}, 0, nil)
+	cr.VerifyWasCalledOnce().RunCommentCommand(matchers.AnyLog15V2Logger(), AnyRepo(), matchers.AnyPtrToModelsRepo(), matchers.AnyModelsUser(), AnyInt(), matchers.AnyPtrToEventsCommentCommand())
 }
 
 func TestPost_GithubCommentSuccess(t *testing.T) {
@@ -287,7 +287,13 @@ func TestPost_GithubCommentSuccess(t *testing.T) {
 	e.Post(w, req)
 	responseContains(t, w, http.StatusOK, "Processing...")
 
-	cr.VerifyWasCalledOnce().RunCommentCommand(baseRepo, nil, user, 1, &cmd)
+	_, actBaseRepo, actHeadRepo, actUser, actPullNum, actCmd := cr.VerifyWasCalledOnce().RunCommentCommand(matchers.AnyLog15V2Logger(), AnyRepo(), matchers.AnyPtrToModelsRepo(), matchers.AnyModelsUser(), AnyInt(), matchers.AnyPtrToEventsCommentCommand()).GetCapturedArguments()
+	var expHeadRepo *models.Repo
+	Equals(t, baseRepo, actBaseRepo)
+	Equals(t, expHeadRepo, actHeadRepo)
+	Equals(t, user, actUser)
+	Equals(t, 1, actPullNum)
+	Equals(t, &cmd, actCmd)
 }
 
 func TestPost_GithubPullRequestInvalid(t *testing.T) {
@@ -301,7 +307,7 @@ func TestPost_GithubPullRequestInvalid(t *testing.T) {
 	When(p.ParseGithubPullEvent(matchers.AnyPtrToGithubPullRequestEvent())).ThenReturn(models.PullRequest{}, models.Repo{}, models.Repo{}, models.User{}, errors.New("err"))
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusBadRequest, "Error parsing pull data: err")
+	responseContains(t, w, http.StatusBadRequest, "Error parsing pull data")
 }
 
 func TestPost_GitlabMergeRequestInvalid(t *testing.T) {
@@ -315,7 +321,7 @@ func TestPost_GitlabMergeRequestInvalid(t *testing.T) {
 	When(p.ParseGitlabMergeEvent(gitlabMergeEvent)).ThenReturn(pullRequest, repo, repo, models.User{}, errors.New("err"))
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusBadRequest, "Error parsing webhook: err")
+	responseContains(t, w, http.StatusBadRequest, "Error parsing webhook")
 }
 
 func TestPost_GithubPullRequestNotWhitelisted(t *testing.T) {
@@ -392,7 +398,7 @@ func TestPost_GithubPullRequestClosedErrCleaningPull(t *testing.T) {
 	When(c.CleanUpPull(repo, pull)).ThenReturn(errors.New("cleanup err"))
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusInternalServerError, "Error cleaning pull request: cleanup err")
+	responseContains(t, w, http.StatusInternalServerError, "Error cleaning pull request")
 }
 
 func TestPost_GitlabMergeRequestClosedErrCleaningPull(t *testing.T) {
@@ -408,7 +414,7 @@ func TestPost_GitlabMergeRequestClosedErrCleaningPull(t *testing.T) {
 	When(c.CleanUpPull(repo, pullRequest)).ThenReturn(errors.New("err"))
 	w := httptest.NewRecorder()
 	e.Post(w, req)
-	responseContains(t, w, http.StatusInternalServerError, "Error cleaning pull request: err")
+	responseContains(t, w, http.StatusInternalServerError, "Error cleaning pull request")
 }
 
 func TestPost_GithubClosedPullRequestSuccess(t *testing.T) {
@@ -493,7 +499,7 @@ func TestPost_PullOpenedOrUpdated(t *testing.T) {
 			w := httptest.NewRecorder()
 			e.Post(w, req)
 			responseContains(t, w, http.StatusOK, "Processing...")
-			cr.VerifyWasCalledOnce().RunAutoplanCommand(models.Repo{}, models.Repo{}, models.PullRequest{State: models.Closed}, models.User{})
+			cr.VerifyWasCalledOnce().RunAutoplanCommand(matchers.AnyLog15V2Logger(), matchers.AnyModelsRepo(), matchers.AnyModelsRepo(), matchers.AnyModelsPullRequest(), matchers.AnyModelsUser())
 		})
 	}
 }
@@ -509,7 +515,7 @@ func setup(t *testing.T) (server.EventsController, *mocks.MockGithubRequestValid
 	vcsmock := vcsmocks.NewMockClientProxy()
 	e := server.EventsController{
 		TestingMode:                  true,
-		Logger:                       logging.NewNoopLogger(),
+		Logger:                       log.New(),
 		GithubRequestValidator:       v,
 		Parser:                       p,
 		CommentParser:                cp,

@@ -54,7 +54,7 @@ ngrok http 4141
 
 ## Code Style
 ### Logging
-- `ctx.Log` should be available in most methods. If not, pass it down.
+- `ctx.Logger` should be available in most methods. If not, pass it down.
 - levels:
     - debug is for developers of atlantis
     - info is for users (expected that people run on info level)

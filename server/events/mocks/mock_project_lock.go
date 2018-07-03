@@ -6,10 +6,11 @@ package mocks
 import (
 	"reflect"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	pegomock "github.com/petergtz/pegomock"
 	events "github.com/runatlantis/atlantis/server/events"
 	models "github.com/runatlantis/atlantis/server/events/models"
-	logging "github.com/runatlantis/atlantis/server/logging"
 )
 
 type MockProjectLocker struct {
@@ -20,7 +21,7 @@ func NewMockProjectLocker() *MockProjectLocker {
 	return &MockProjectLocker{fail: pegomock.GlobalFailHandler}
 }
 
-func (mock *MockProjectLocker) TryLock(log *logging.SimpleLogger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*events.TryLockResponse, error) {
+func (mock *MockProjectLocker) TryLock(log log.Logger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*events.TryLockResponse, error) {
 	params := []pegomock.Param{log, pull, user, workspace, project}
 	result := pegomock.GetGenericMockFrom(mock).Invoke("TryLock", params, []reflect.Type{reflect.TypeOf((**events.TryLockResponse)(nil)).Elem(), reflect.TypeOf((*error)(nil)).Elem()})
 	var ret0 *events.TryLockResponse
@@ -54,7 +55,7 @@ type VerifierProjectLocker struct {
 	inOrderContext         *pegomock.InOrderContext
 }
 
-func (verifier *VerifierProjectLocker) TryLock(log *logging.SimpleLogger, pull models.PullRequest, user models.User, workspace string, project models.Project) *ProjectLocker_TryLock_OngoingVerification {
+func (verifier *VerifierProjectLocker) TryLock(log log.Logger, pull models.PullRequest, user models.User, workspace string, project models.Project) *ProjectLocker_TryLock_OngoingVerification {
 	params := []pegomock.Param{log, pull, user, workspace, project}
 	methodInvocations := pegomock.GetGenericMockFrom(verifier.mock).Verify(verifier.inOrderContext, verifier.invocationCountMatcher, "TryLock", params)
 	return &ProjectLocker_TryLock_OngoingVerification{mock: verifier.mock, methodInvocations: methodInvocations}
@@ -65,17 +66,17 @@ type ProjectLocker_TryLock_OngoingVerification struct {
 	methodInvocations []pegomock.MethodInvocation
 }
 
-func (c *ProjectLocker_TryLock_OngoingVerification) GetCapturedArguments() (*logging.SimpleLogger, models.PullRequest, models.User, string, models.Project) {
+func (c *ProjectLocker_TryLock_OngoingVerification) GetCapturedArguments() (log.Logger, models.PullRequest, models.User, string, models.Project) {
 	log, pull, user, workspace, project := c.GetAllCapturedArguments()
 	return log[len(log)-1], pull[len(pull)-1], user[len(user)-1], workspace[len(workspace)-1], project[len(project)-1]
 }
 
-func (c *ProjectLocker_TryLock_OngoingVerification) GetAllCapturedArguments() (_param0 []*logging.SimpleLogger, _param1 []models.PullRequest, _param2 []models.User, _param3 []string, _param4 []models.Project) {
+func (c *ProjectLocker_TryLock_OngoingVerification) GetAllCapturedArguments() (_param0 []log.Logger, _param1 []models.PullRequest, _param2 []models.User, _param3 []string, _param4 []models.Project) {
 	params := pegomock.GetGenericMockFrom(c.mock).GetInvocationParams(c.methodInvocations)
 	if len(params) > 0 {
-		_param0 = make([]*logging.SimpleLogger, len(params[0]))
+		_param0 = make([]log.Logger, len(params[0]))
 		for u, param := range params[0] {
-			_param0[u] = param.(*logging.SimpleLogger)
+			_param0[u] = param.(log.Logger)
 		}
 		_param1 = make([]models.PullRequest, len(params[1]))
 		for u, param := range params[1] {

@@ -21,8 +21,8 @@ import (
 	"github.com/runatlantis/atlantis/server/events/locking"
 	"github.com/runatlantis/atlantis/server/events/locking/mocks"
 	"github.com/runatlantis/atlantis/server/events/models"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestDefaultProjectLocker_TryLockWhenLocked(t *testing.T) {
@@ -48,7 +48,7 @@ func TestDefaultProjectLocker_TryLockWhenLocked(t *testing.T) {
 		},
 		nil,
 	)
-	res, err := locker.TryLock(logging.NewNoopLogger(), expPull, expUser, expWorkspace, expProject)
+	res, err := locker.TryLock(log.New(), expPull, expUser, expWorkspace, expProject)
 	Ok(t, err)
 	Equals(t, &events.TryLockResponse{
 		LockAcquired:      false,
@@ -81,7 +81,7 @@ func TestDefaultProjectLocker_TryLockWhenLockedSamePull(t *testing.T) {
 		},
 		nil,
 	)
-	res, err := locker.TryLock(logging.NewNoopLogger(), expPull, expUser, expWorkspace, expProject)
+	res, err := locker.TryLock(log.New(), expPull, expUser, expWorkspace, expProject)
 	Ok(t, err)
 	Equals(t, true, res.LockAcquired)
 
@@ -117,7 +117,7 @@ func TestDefaultProjectLocker_TryLockUnlocked(t *testing.T) {
 		},
 		nil,
 	)
-	res, err := locker.TryLock(logging.NewNoopLogger(), expPull, expUser, expWorkspace, expProject)
+	res, err := locker.TryLock(log.New(), expPull, expUser, expWorkspace, expProject)
 	Ok(t, err)
 	Equals(t, true, res.LockAcquired)
 

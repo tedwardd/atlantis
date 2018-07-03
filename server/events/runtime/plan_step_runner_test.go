@@ -15,8 +15,8 @@ import (
 	"github.com/runatlantis/atlantis/server/events/terraform/mocks"
 	matchers2 "github.com/runatlantis/atlantis/server/events/terraform/mocks/matchers"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestRun_NoWorkspaceIn08(t *testing.T) {
@@ -25,7 +25,7 @@ func TestRun_NoWorkspaceIn08(t *testing.T) {
 	terraform := mocks.NewMockClient()
 
 	tfVersion, _ := version.NewVersion("0.8")
-	logger := logging.NewNoopLogger()
+	logger := log.New()
 	workspace := "default"
 	s := runtime.PlanStepRunner{
 		DefaultTFVersion:  tfVersion,
@@ -58,7 +58,7 @@ func TestRun_ErrWorkspaceIn08(t *testing.T) {
 	terraform := mocks.NewMockClient()
 
 	tfVersion, _ := version.NewVersion("0.8")
-	logger := logging.NewNoopLogger()
+	logger := log.New()
 	workspace := "notdefault"
 	s := runtime.PlanStepRunner{
 		TerraformExecutor: terraform,
@@ -106,7 +106,7 @@ func TestRun_SwitchesWorkspace(t *testing.T) {
 			terraform := mocks.NewMockClient()
 
 			tfVersion, _ := version.NewVersion(c.tfVersion)
-			logger := logging.NewNoopLogger()
+			logger := log.New()
 
 			s := runtime.PlanStepRunner{
 				TerraformExecutor: terraform,
@@ -162,7 +162,7 @@ func TestRun_CreatesWorkspace(t *testing.T) {
 		t.Run(c.tfVersion, func(t *testing.T) {
 			terraform := mocks.NewMockClient()
 			tfVersion, _ := version.NewVersion(c.tfVersion)
-			logger := logging.NewNoopLogger()
+			logger := log.New()
 			s := runtime.PlanStepRunner{
 				TerraformExecutor: terraform,
 				DefaultTFVersion:  tfVersion,
@@ -201,7 +201,7 @@ func TestRun_NoWorkspaceSwitchIfNotNecessary(t *testing.T) {
 	RegisterMockTestingT(t)
 	terraform := mocks.NewMockClient()
 	tfVersion, _ := version.NewVersion("0.10.0")
-	logger := logging.NewNoopLogger()
+	logger := log.New()
 	s := runtime.PlanStepRunner{
 		TerraformExecutor: terraform,
 		DefaultTFVersion:  tfVersion,
@@ -243,7 +243,7 @@ func TestRun_AddsEnvVarFile(t *testing.T) {
 
 	// Using version >= 0.10 here so we don't expect any env commands.
 	tfVersion, _ := version.NewVersion("0.10.0")
-	logger := logging.NewNoopLogger()
+	logger := log.New()
 	s := runtime.PlanStepRunner{
 		TerraformExecutor: terraform,
 		DefaultTFVersion:  tfVersion,
@@ -273,7 +273,7 @@ func TestRun_UsesDiffPathForProject(t *testing.T) {
 	RegisterMockTestingT(t)
 	terraform := mocks.NewMockClient()
 	tfVersion, _ := version.NewVersion("0.10.0")
-	logger := logging.NewNoopLogger()
+	logger := log.New()
 	s := runtime.PlanStepRunner{
 		TerraformExecutor: terraform,
 		DefaultTFVersion:  tfVersion,

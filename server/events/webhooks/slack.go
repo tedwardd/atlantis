@@ -16,10 +16,11 @@ package webhooks
 import (
 	"regexp"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 // SlackWebhook sends webhooks to Slack.
@@ -50,7 +51,7 @@ func NewSlack(r *regexp.Regexp, channel string, client SlackClient) (*SlackWebho
 }
 
 // Send sends the webhook to Slack if the workspace matches the regex.
-func (s *SlackWebhook) Send(log *logging.SimpleLogger, applyResult ApplyResult) error {
+func (s *SlackWebhook) Send(log log.Logger, applyResult ApplyResult) error {
 	if !s.WorkspaceRegex.MatchString(applyResult.Workspace) {
 		return nil
 	}

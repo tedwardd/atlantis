@@ -10,8 +10,8 @@ import (
 	"github.com/runatlantis/atlantis/server/events/runtime"
 	"github.com/runatlantis/atlantis/server/events/terraform/mocks"
 	matchers2 "github.com/runatlantis/atlantis/server/events/terraform/mocks/matchers"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestRun_UsesGetOrInitForRightVersion(t *testing.T) {
@@ -43,7 +43,7 @@ func TestRun_UsesGetOrInitForRightVersion(t *testing.T) {
 			terraform := mocks.NewMockClient()
 
 			tfVersion, _ := version.NewVersion(c.version)
-			logger := logging.NewNoopLogger()
+			logger := log.New()
 			iso := runtime.InitStepRunner{
 				TerraformExecutor: terraform,
 				DefaultTFVersion:  tfVersion,

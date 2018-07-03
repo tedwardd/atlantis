@@ -6,9 +6,10 @@ package mocks
 import (
 	"reflect"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	pegomock "github.com/petergtz/pegomock"
 	models "github.com/runatlantis/atlantis/server/events/models"
-	logging "github.com/runatlantis/atlantis/server/logging"
 )
 
 type MockProjectFinder struct {
@@ -19,7 +20,7 @@ func NewMockProjectFinder() *MockProjectFinder {
 	return &MockProjectFinder{fail: pegomock.GlobalFailHandler}
 }
 
-func (mock *MockProjectFinder) DetermineProjects(log *logging.SimpleLogger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project {
+func (mock *MockProjectFinder) DetermineProjects(log log.Logger, modifiedFiles []string, repoFullName string, repoDir string) []models.Project {
 	params := []pegomock.Param{log, modifiedFiles, repoFullName, repoDir}
 	result := pegomock.GetGenericMockFrom(mock).Invoke("DetermineProjects", params, []reflect.Type{reflect.TypeOf((*[]models.Project)(nil)).Elem()})
 	var ret0 []models.Project
@@ -49,7 +50,7 @@ type VerifierProjectFinder struct {
 	inOrderContext         *pegomock.InOrderContext
 }
 
-func (verifier *VerifierProjectFinder) DetermineProjects(log *logging.SimpleLogger, modifiedFiles []string, repoFullName string, repoDir string) *ProjectFinder_DetermineProjects_OngoingVerification {
+func (verifier *VerifierProjectFinder) DetermineProjects(log log.Logger, modifiedFiles []string, repoFullName string, repoDir string) *ProjectFinder_DetermineProjects_OngoingVerification {
 	params := []pegomock.Param{log, modifiedFiles, repoFullName, repoDir}
 	methodInvocations := pegomock.GetGenericMockFrom(verifier.mock).Verify(verifier.inOrderContext, verifier.invocationCountMatcher, "DetermineProjects", params)
 	return &ProjectFinder_DetermineProjects_OngoingVerification{mock: verifier.mock, methodInvocations: methodInvocations}
@@ -60,17 +61,17 @@ type ProjectFinder_DetermineProjects_OngoingVerification struct {
 	methodInvocations []pegomock.MethodInvocation
 }
 
-func (c *ProjectFinder_DetermineProjects_OngoingVerification) GetCapturedArguments() (*logging.SimpleLogger, []string, string, string) {
+func (c *ProjectFinder_DetermineProjects_OngoingVerification) GetCapturedArguments() (log.Logger, []string, string, string) {
 	log, modifiedFiles, repoFullName, repoDir := c.GetAllCapturedArguments()
 	return log[len(log)-1], modifiedFiles[len(modifiedFiles)-1], repoFullName[len(repoFullName)-1], repoDir[len(repoDir)-1]
 }
 
-func (c *ProjectFinder_DetermineProjects_OngoingVerification) GetAllCapturedArguments() (_param0 []*logging.SimpleLogger, _param1 [][]string, _param2 []string, _param3 []string) {
+func (c *ProjectFinder_DetermineProjects_OngoingVerification) GetAllCapturedArguments() (_param0 []log.Logger, _param1 [][]string, _param2 []string, _param3 []string) {
 	params := pegomock.GetGenericMockFrom(c.mock).GetInvocationParams(c.methodInvocations)
 	if len(params) > 0 {
-		_param0 = make([]*logging.SimpleLogger, len(params[0]))
+		_param0 = make([]log.Logger, len(params[0]))
 		for u, param := range params[0] {
-			_param0[u] = param.(*logging.SimpleLogger)
+			_param0[u] = param.(log.Logger)
 		}
 		_param1 = make([][]string, len(params[1]))
 		for u, param := range params[1] {

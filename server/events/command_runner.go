@@ -16,6 +16,8 @@ package events
 import (
 	"fmt"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/google/go-github/github"
 	"github.com/lkysow/go-gitlab"
 	"github.com/pkg/errors"
@@ -32,8 +34,8 @@ type CommandRunner interface {
 	// RunCommentCommand is the first step after a command request has been parsed.
 	// It handles gathering additional information needed to execute the command
 	// and then calling the appropriate services to finish executing the command.
-	RunCommentCommand(baseRepo models.Repo, maybeHeadRepo *models.Repo, user models.User, pullNum int, cmd *CommentCommand)
-	RunAutoplanCommand(baseRepo models.Repo, headRepo models.Repo, pull models.PullRequest, user models.User)
+	RunCommentCommand(logger log.Logger, baseRepo models.Repo, maybeHeadRepo *models.Repo, user models.User, pullNum int, cmd *CommentCommand)
+	RunAutoplanCommand(logger log.Logger, baseRepo models.Repo, headRepo models.Repo, pull models.PullRequest, user models.User)
 }
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_github_pull_getter.go GithubPullGetter
@@ -60,7 +62,6 @@ type DefaultCommandRunner struct {
 	CommitStatusUpdater      CommitStatusUpdater
 	EventParser              EventParsing
 	MarkdownRenderer         *MarkdownRenderer
-	Logger                   logging.SimpleLogging
 	// AllowForkPRs controls whether we operate on pull requests from forks.
 	AllowForkPRs bool
 	// AllowForkPRsFlag is the name of the flag that controls fork PR's. We use
@@ -71,11 +72,11 @@ type DefaultCommandRunner struct {
 	ProjectCommandRunner  ProjectCommandRunner
 }
 
-func (c *DefaultCommandRunner) RunAutoplanCommand(baseRepo models.Repo, headRepo models.Repo, pull models.PullRequest, user models.User) {
-	log := c.buildLogger(baseRepo.FullName, pull.Num)
+func (c *DefaultCommandRunner) RunAutoplanCommand(logger log.Logger, baseRepo models.Repo, headRepo models.Repo, pull models.PullRequest, user models.User) {
+	pullLogger := c.buildLogger(logger, baseRepo.FullName, pull.Num)
 	ctx := &CommandContext{
 		User:     user,
-		Log:      log,
+		Logger:   pullLogger,
 		Pull:     pull,
 		HeadRepo: headRepo,
 		BaseRepo: baseRepo,
@@ -85,7 +86,7 @@ func (c *DefaultCommandRunner) RunAutoplanCommand(baseRepo models.Repo, headRepo
 		return
 	}
 	if err := c.CommitStatusUpdater.Update(ctx.BaseRepo, ctx.Pull, vcs.Pending, Plan); err != nil {
-		ctx.Log.Warn("unable to update commit status: %s", err)
+		ctx.Logger.Warn("unable to update commit status", "err", err)
 	}
 
 	projectCmds, err := c.ProjectCommandBuilder.BuildAutoplanCommands(ctx)
@@ -111,8 +112,8 @@ func (c *DefaultCommandRunner) RunAutoplanCommand(baseRepo models.Repo, headRepo
 // enough data to construct the Repo model and callers might want to wait until
 // the event is further validated before making an additional (potentially
 // wasteful) call to get the necessary data.
-func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHeadRepo *models.Repo, user models.User, pullNum int, cmd *CommentCommand) {
-	log := c.buildLogger(baseRepo.FullName, pullNum)
+func (c *DefaultCommandRunner) RunCommentCommand(logger log.Logger, baseRepo models.Repo, maybeHeadRepo *models.Repo, user models.User, pullNum int, cmd *CommentCommand) {
+	pullLogger := c.buildLogger(logger, baseRepo.FullName, pullNum)
 	var headRepo models.Repo
 	if maybeHeadRepo != nil {
 		headRepo = *maybeHeadRepo
@@ -129,12 +130,12 @@ func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHead
 		err = errors.New("Unknown VCS type, this is a bug!")
 	}
 	if err != nil {
-		log.Err(err.Error())
+		pullLogger.Error(err.Error())
 		return
 	}
 	ctx := &CommandContext{
 		User:     user,
-		Log:      log,
+		Logger:   pullLogger,
 		Pull:     pull,
 		HeadRepo: headRepo,
 		BaseRepo: baseRepo,
@@ -146,7 +147,7 @@ func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHead
 	}
 
 	if err := c.CommitStatusUpdater.Update(ctx.BaseRepo, ctx.Pull, vcs.Pending, cmd.CommandName()); err != nil {
-		ctx.Log.Warn("unable to update commit status: %s", err)
+		ctx.Logger.Warn("unable to update commit status", "err", err)
 	}
 
 	var result ProjectCommandResult
@@ -166,7 +167,7 @@ func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHead
 		}
 		result = c.ProjectCommandRunner.Apply(projectCmd)
 	default:
-		ctx.Log.Err("failed to determine desired command, neither plan nor apply")
+		ctx.Logger.Error("failed to determine desired command, neither plan nor apply")
 		return
 	}
 
@@ -208,20 +209,22 @@ func (c *DefaultCommandRunner) getGitlabData(baseRepo models.Repo, pullNum int) 
 	return pull, nil
 }
 
-func (c *DefaultCommandRunner) buildLogger(repoFullName string, pullNum int) *logging.SimpleLogger {
+func (c *DefaultCommandRunner) buildLogger(parentLogger log.Logger, repoFullName string, pullNum int) log.Logger {
 	src := fmt.Sprintf("%s#%d", repoFullName, pullNum)
-	return logging.NewSimpleLogger(src, c.Logger.Underlying(), true, c.Logger.GetLevel())
+	pullLogger := parentLogger.New("pull", src)
+	pullLogger.SetHandler(logging.NewHistoryHandler(pullLogger.GetHandler()))
+	return pullLogger
 }
 
 func (c *DefaultCommandRunner) validateCtxAndComment(ctx *CommandContext) bool {
 	if !c.AllowForkPRs && ctx.HeadRepo.Owner != ctx.BaseRepo.Owner {
-		ctx.Log.Info("command was run on a fork pull request which is disallowed")
+		ctx.Logger.Info("command was run on a fork pull request which is disallowed")
 		c.VCSClient.CreateComment(ctx.BaseRepo, ctx.Pull.Num, fmt.Sprintf("Atlantis commands can't be run on fork pull requests. To enable, set --%s", c.AllowForkPRsFlag)) // nolint: errcheck
 		return false
 	}
 
 	if ctx.Pull.State != models.Open {
-		ctx.Log.Info("command was run on closed pull request")
+		ctx.Logger.Info("command was run on closed pull request")
 		c.VCSClient.CreateComment(ctx.BaseRepo, ctx.Pull.Num, "Atlantis commands can't be run on closed pull requests") // nolint: errcheck
 		return false
 	}
@@ -231,17 +234,22 @@ func (c *DefaultCommandRunner) validateCtxAndComment(ctx *CommandContext) bool {
 func (c *DefaultCommandRunner) updatePull(ctx *CommandContext, command CommandInterface, res CommandResult) {
 	// Log if we got any errors or failures.
 	if res.Error != nil {
-		ctx.Log.Err(res.Error.Error())
+		ctx.Logger.Error(res.Error.Error())
 	} else if res.Failure != "" {
-		ctx.Log.Warn(res.Failure)
+		ctx.Logger.Warn(res.Failure)
 	}
 
 	// Update the pull request's status icon and comment back.
 	if err := c.CommitStatusUpdater.UpdateProjectResult(ctx, command.CommandName(), res); err != nil {
-		ctx.Log.Warn("unable to update commit status: %s", err)
+		ctx.Logger.Warn("unable to update commit status", "err", err)
 	}
-	comment := c.MarkdownRenderer.Render(res, command.CommandName(), ctx.Log.History.String(), command.IsVerbose(), command.IsAutoplan())
-	c.VCSClient.CreateComment(ctx.BaseRepo, ctx.Pull.Num, comment) // nolint: errcheck
+	logHistory, ok := ctx.Logger.GetHandler().(*logging.HistoryHandler)
+	if !ok {
+		ctx.Logger.Error("could not cast logger to logging.HistoryHandler; this is a bug!")
+	} else {
+		comment := c.MarkdownRenderer.Render(res, command.CommandName(), logHistory.History.String(), command.IsVerbose(), command.IsAutoplan())
+		c.VCSClient.CreateComment(ctx.BaseRepo, ctx.Pull.Num, comment) // nolint: errcheck
+	}
 }
 
 // logPanics logs and creates a comment on the pull request for panics.
@@ -250,6 +258,6 @@ func (c *DefaultCommandRunner) logPanics(ctx *CommandContext) {
 		stack := recovery.Stack(3)
 		c.VCSClient.CreateComment(ctx.BaseRepo, ctx.Pull.Num, // nolint: errcheck
 			fmt.Sprintf("**Error: goroutine panic. This is a bug.**\n```\n%s\n%s```", err, stack))
-		ctx.Log.Err("PANIC: %s\n%s", err, stack)
+		ctx.Logger.Error(fmt.Sprintf("PANIC: %s", err), "stack", stack)
 	}
 }

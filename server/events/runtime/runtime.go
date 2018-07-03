@@ -4,12 +4,13 @@
 package runtime
 
 import (
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/hashicorp/go-version"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 type TerraformExec interface {
-	RunCommandWithVersion(log *logging.SimpleLogger, path string, args []string, v *version.Version, workspace string) (string, error)
+	RunCommandWithVersion(log log.Logger, path string, args []string, v *version.Version, workspace string) (string, error)
 }
 
 // MustConstraint returns a constraint. It panics on error.

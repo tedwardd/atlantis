@@ -14,29 +14,53 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 
-	"github.com/runatlantis/atlantis/server/logging"
 	"github.com/urfave/negroni"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 // NewRequestLogger creates a RequestLogger.
-func NewRequestLogger(logger *logging.SimpleLogger) *RequestLogger {
+func NewRequestLogger(logger log.Logger) *RequestLogger {
 	return &RequestLogger{logger}
 }
 
 // RequestLogger logs requests and their response codes.
 type RequestLogger struct {
-	logger *logging.SimpleLogger
+	logger log.Logger
 }
 
 // ServeHTTP implements the middleware function. It logs a request at INFO
 // level unless it's a request to /static/*.
 func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	l.logger.Info(fmt.Sprintf("Handling %s %s", r.Method, r.URL.RequestURI()))
 	next(rw, r)
 	res := rw.(negroni.ResponseWriter)
 	if !strings.HasPrefix(r.URL.RequestURI(), "/static") {
-		l.logger.Info("%d | %s %s", res.Status(), r.Method, r.URL.RequestURI())
+		l.logger.Info(fmt.Sprintf("Responded to %s %s", r.Method, r.URL.RequestURI()), "code", res.Status())
 	}
+}
+
+// Recovery is a Negroni middleware that recovers from any panics and writes a 500 if there was one.
+type Recovery struct {
+	Logger     log.Logger
+	PrintStack bool
+	StackAll   bool
+	StackSize  int
+}
+
+func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	defer func() {
+		if err := recover(); err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			stack := make([]byte, rec.StackSize)
+			stack = stack[:runtime.Stack(stack, rec.StackAll)]
+			rec.Logger.Error(fmt.Sprintf("PANIC: %s", err), "stack", string(stack))
+		}
+	}()
+
+	next(rw, r)
 }

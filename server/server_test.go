@@ -30,6 +30,7 @@ import (
 	"github.com/runatlantis/atlantis/server/events/models"
 	sMocks "github.com/runatlantis/atlantis/server/mocks"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestNewServer(t *testing.T) {
@@ -38,7 +39,7 @@ func TestNewServer(t *testing.T) {
 	Ok(t, err)
 	_, err = server.NewServer(server.UserConfig{
 		DataDir: tmpDir,
-	}, server.Config{})
+	}, server.Config{}, log.New())
 	Ok(t, err)
 }
 

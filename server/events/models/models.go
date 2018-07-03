@@ -23,9 +23,10 @@ import (
 	"strings"
 	"time"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/pkg/errors"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 // DefaultWorkspace is the default Terraform workspace for both Atlantis and
@@ -231,7 +232,7 @@ type ProjectCommandContext struct {
 	Pull     PullRequest
 	// User is the user that triggered this command.
 	User          User
-	Log           *logging.SimpleLogger
+	Log           log.Logger
 	RepoRelDir    string
 	ProjectConfig *valid.Project
 	GlobalConfig  *valid.Config

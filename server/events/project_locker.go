@@ -16,9 +16,10 @@ package events
 import (
 	"fmt"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/runatlantis/atlantis/server/events/locking"
 	"github.com/runatlantis/atlantis/server/events/models"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_project_lock.go ProjectLocker
@@ -32,7 +33,7 @@ type ProjectLocker interface {
 	// The third return value is a function that can be called to unlock the
 	// lock. It will only be set if the lock was acquired. Any errors will set
 	// error.
-	TryLock(log *logging.SimpleLogger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*TryLockResponse, error)
+	TryLock(log log.Logger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*TryLockResponse, error)
 }
 
 // DefaultProjectLocker implements ProjectLocker.
@@ -56,7 +57,7 @@ type TryLockResponse struct {
 }
 
 // TryLock implements ProjectLocker.TryLock.
-func (p *DefaultProjectLocker) TryLock(log *logging.SimpleLogger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*TryLockResponse, error) {
+func (p *DefaultProjectLocker) TryLock(log log.Logger, pull models.PullRequest, user models.User, workspace string, project models.Project) (*TryLockResponse, error) {
 	lockAttempt, err := p.Locker.TryLock(project, workspace, pull, user)
 	if err != nil {
 		return nil, err
@@ -70,7 +71,7 @@ func (p *DefaultProjectLocker) TryLock(log *logging.SimpleLogger, pull models.Pu
 			LockFailureReason: failureMsg,
 		}, nil
 	}
-	log.Info("acquired lock with id %q", lockAttempt.LockKey)
+	log.Info("acquired lock", "id", lockAttempt.LockKey)
 	return &TryLockResponse{
 		LockAcquired: true,
 		UnlockFn: func() error {

@@ -15,9 +15,10 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"strings"
+
+	log "gopkg.in/inconshreveable/log15.v2"
 
 	"fmt"
 

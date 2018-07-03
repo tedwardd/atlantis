@@ -16,7 +16,9 @@ package main
 
 import (
 	"github.com/runatlantis/atlantis/cmd"
+	"github.com/runatlantis/atlantis/server/logging"
 	"github.com/spf13/viper"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 const atlantisVersion = "0.3.10"
@@ -24,12 +26,16 @@ const atlantisVersion = "0.3.10"
 func main() {
 	v := viper.New()
 
+	logger := log.New()
+	logger.SetHandler(logging.CapitalizeHandler(log.StderrHandler))
+
 	// We're creating commands manually here rather than using init() functions
 	// (as recommended by cobra) because it makes testing easier.
 	server := &cmd.ServerCmd{
 		ServerCreator:   &cmd.DefaultServerCreator{},
 		Viper:           v,
 		AtlantisVersion: atlantisVersion,
+		Logger:          logger,
 	}
 	version := &cmd.VersionCmd{AtlantisVersion: atlantisVersion}
 	testdrive := &cmd.TestdriveCmd{}

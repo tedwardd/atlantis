@@ -3,13 +3,14 @@ package events
 import (
 	"fmt"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/runatlantis/atlantis/server/events/models"
 	"github.com/runatlantis/atlantis/server/events/vcs"
 	"github.com/runatlantis/atlantis/server/events/yaml"
 	"github.com/runatlantis/atlantis/server/events/yaml/valid"
-	"github.com/runatlantis/atlantis/server/logging"
 )
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_project_command_builder.go ProjectCommandBuilder
@@ -31,7 +32,7 @@ type DefaultProjectCommandBuilder struct {
 }
 
 type TerraformExec interface {
-	RunCommandWithVersion(log *logging.SimpleLogger, path string, args []string, v *version.Version, workspace string) (string, error)
+	RunCommandWithVersion(log log.Logger, path string, args []string, v *version.Version, workspace string) (string, error)
 }
 
 func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext) ([]models.ProjectCommandContext, error) {
@@ -39,13 +40,13 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 	workspace := DefaultWorkspace
 	unlockFn, err := p.WorkingDirLocker.TryLock(ctx.BaseRepo.FullName, workspace, ctx.Pull.Num)
 	if err != nil {
-		ctx.Log.Warn("workspace was locked")
+		ctx.Logger.Warn("workspace was locked")
 		return nil, err
 	}
-	ctx.Log.Debug("got workspace lock")
+	ctx.Logger.Debug("got workspace lock")
 	defer unlockFn()
 
-	repoDir, err := p.WorkingDir.Clone(ctx.Log, ctx.BaseRepo, ctx.HeadRepo, ctx.Pull, workspace)
+	repoDir, err := p.WorkingDir.Clone(ctx.Logger, ctx.BaseRepo, ctx.HeadRepo, ctx.Pull, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +65,9 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 		if err != nil {
 			return nil, err
 		}
-		ctx.Log.Info("successfully parsed %s file", yaml.AtlantisYAMLFilename)
+		ctx.Logger.Info("successfully parsed atlantis.yaml file")
 	} else {
-		ctx.Log.Info("found no %s file", yaml.AtlantisYAMLFilename)
+		ctx.Logger.Info("found no atlantis.yaml file")
 	}
 
 	// We'll need the list of modified files.
@@ -74,7 +75,7 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 	if err != nil {
 		return nil, err
 	}
-	ctx.Log.Debug("%d files were modified in this pull request", len(modifiedFiles))
+	ctx.Logger.Debug(fmt.Sprintf("%d files were modified in this pull request", len(modifiedFiles)))
 
 	// Prepare the project contexts so the ProjectCommandRunner can execute.
 	var projCtxs []models.ProjectCommandContext
@@ -82,15 +83,15 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 	// If there is no config file, then we try to plan for each project that
 	// was modified in the pull request.
 	if !hasConfigFile {
-		modifiedProjects := p.ProjectFinder.DetermineProjects(ctx.Log, modifiedFiles, ctx.BaseRepo.FullName, repoDir)
-		ctx.Log.Info("automatically determined that there were %d projects modified in this pull request: %s", len(modifiedProjects), modifiedProjects)
+		modifiedProjects := p.ProjectFinder.DetermineProjects(ctx.Logger, modifiedFiles, ctx.BaseRepo.FullName, repoDir)
+		ctx.Logger.Info(fmt.Sprintf("automatically determined that there were %d projects modified in this pull request", len(modifiedProjects)), "projects", modifiedProjects)
 		for _, mp := range modifiedProjects {
 			projCtxs = append(projCtxs, models.ProjectCommandContext{
 				BaseRepo:      ctx.BaseRepo,
 				HeadRepo:      ctx.HeadRepo,
 				Pull:          ctx.Pull,
 				User:          ctx.User,
-				Log:           ctx.Log,
+				Log:           ctx.Logger,
 				RepoRelDir:    mp.Path,
 				ProjectConfig: nil,
 				GlobalConfig:  nil,
@@ -101,11 +102,11 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 	} else {
 		// Otherwise, we use the projects that match the WhenModified fields
 		// in the config file.
-		matchingProjects, err := p.ProjectFinder.DetermineProjectsViaConfig(ctx.Log, modifiedFiles, config, repoDir)
+		matchingProjects, err := p.ProjectFinder.DetermineProjectsViaConfig(ctx.Logger, modifiedFiles, config, repoDir)
 		if err != nil {
 			return nil, err
 		}
-		ctx.Log.Info("%d projects are to be autoplanned based on their when_modified config", len(matchingProjects))
+		ctx.Logger.Info(fmt.Sprintf("%d projects are to be autoplanned based on their when_modified config", len(matchingProjects)))
 
 		// Use for i instead of range because need to get the pointer to the
 		// project config.
@@ -116,7 +117,7 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 				HeadRepo:      ctx.HeadRepo,
 				Pull:          ctx.Pull,
 				User:          ctx.User,
-				Log:           ctx.Log,
+				Log:           ctx.Logger,
 				CommentArgs:   nil,
 				Workspace:     mp.Workspace,
 				RepoRelDir:    mp.Dir,
@@ -131,15 +132,15 @@ func (p *DefaultProjectCommandBuilder) BuildAutoplanCommands(ctx *CommandContext
 func (p *DefaultProjectCommandBuilder) BuildPlanCommand(ctx *CommandContext, cmd *CommentCommand) (models.ProjectCommandContext, error) {
 	var projCtx models.ProjectCommandContext
 
-	ctx.Log.Debug("building plan command")
+	ctx.Logger.Debug("building plan command")
 	unlockFn, err := p.WorkingDirLocker.TryLock(ctx.BaseRepo.FullName, cmd.Workspace, ctx.Pull.Num)
 	if err != nil {
 		return projCtx, err
 	}
 	defer unlockFn()
 
-	ctx.Log.Debug("cloning repository")
-	repoDir, err := p.WorkingDir.Clone(ctx.Log, ctx.BaseRepo, ctx.HeadRepo, ctx.Pull, cmd.Workspace)
+	ctx.Logger.Debug("cloning repository")
+	repoDir, err := p.WorkingDir.Clone(ctx.Logger, ctx.BaseRepo, ctx.HeadRepo, ctx.Pull, cmd.Workspace)
 	if err != nil {
 		return projCtx, err
 	}
@@ -185,7 +186,7 @@ func (p *DefaultProjectCommandBuilder) buildProjectCommandCtx(ctx *CommandContex
 		HeadRepo:      ctx.HeadRepo,
 		Pull:          ctx.Pull,
 		User:          ctx.User,
-		Log:           ctx.Log,
+		Log:           ctx.Logger,
 		CommentArgs:   cmd.Flags,
 		Workspace:     workspace,
 		RepoRelDir:    dir,

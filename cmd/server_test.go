@@ -26,6 +26,7 @@ import (
 	. "github.com/runatlantis/atlantis/testing"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 // passedConfig is set to whatever config ended up being passed to NewServer.
@@ -34,7 +35,7 @@ var passedConfig server.UserConfig
 
 type ServerCreatorMock struct{}
 
-func (s *ServerCreatorMock) NewServer(userConfig server.UserConfig, config server.Config) (cmd.ServerStarter, error) {
+func (s *ServerCreatorMock) NewServer(userConfig server.UserConfig, config server.Config, logger log.Logger) (cmd.ServerStarter, error) {
 	passedConfig = userConfig
 	return &ServerStarterMock{}, nil
 }

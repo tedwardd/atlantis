@@ -24,6 +24,7 @@ import (
 	"github.com/runatlantis/atlantis/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 // To add a new flag you must:
@@ -189,12 +190,13 @@ type ServerCmd struct {
 	// Useful for testing to keep the logs clean.
 	SilenceOutput   bool
 	AtlantisVersion string
+	Logger          log.Logger
 }
 
 // ServerCreator creates servers.
 // It's an abstraction to help us test.
 type ServerCreator interface {
-	NewServer(userConfig server.UserConfig, config server.Config) (ServerStarter, error)
+	NewServer(userConfig server.UserConfig, config server.Config, logger log.Logger) (ServerStarter, error)
 }
 
 // DefaultServerCreator is the concrete implementation of ServerCreator.
@@ -207,8 +209,8 @@ type ServerStarter interface {
 }
 
 // NewServer returns the real Atlantis server object.
-func (d *DefaultServerCreator) NewServer(userConfig server.UserConfig, config server.Config) (ServerStarter, error) {
-	return server.NewServer(userConfig, config)
+func (d *DefaultServerCreator) NewServer(userConfig server.UserConfig, config server.Config, logger log.Logger) (ServerStarter, error) {
+	return server.NewServer(userConfig, config, logger)
 }
 
 // Init returns the runnable cobra command.
@@ -309,7 +311,7 @@ func (s *ServerCmd) run() error {
 		AllowForkPRsFlag:    AllowForkPRsFlag,
 		AllowRepoConfigFlag: AllowRepoConfigFlag,
 		AtlantisVersion:     s.AtlantisVersion,
-	})
+	}, s.Logger)
 	if err != nil {
 		return errors.Wrap(err, "initializing server")
 	}
@@ -410,10 +412,10 @@ func (s *ServerCmd) trimAtSymbolFromUsers(userConfig *server.UserConfig) {
 
 func (s *ServerCmd) securityWarnings(userConfig *server.UserConfig) {
 	if userConfig.GithubUser != "" && userConfig.GithubWebHookSecret == "" && !s.SilenceOutput {
-		fmt.Fprintf(os.Stderr, "%s[WARN] No GitHub webhook secret set. This could allow attackers to spoof requests from GitHub. See https://git.io/vAF3t%s\n", RedTermStart, RedTermEnd)
+		log.Warn("No GitHub webhook secret set. This could allow attackers to spoof requests from GitHub. See https://www.runatlantis.io/docs/security.html")
 	}
 	if userConfig.GitlabUser != "" && userConfig.GitlabWebHookSecret == "" && !s.SilenceOutput {
-		fmt.Fprintf(os.Stderr, "%s[WARN] No GitLab webhook secret set. This could allow attackers to spoof requests from GitLab. See https://git.io/vAF3t%s\n", RedTermStart, RedTermEnd)
+		log.Warn("No GitLab webhook secret set. This could allow attackers to spoof requests from GitLab. See https://www.runatlantis.io/docs/security.html")
 	}
 }
 

@@ -27,8 +27,8 @@ import (
 	vcsmocks "github.com/runatlantis/atlantis/server/events/vcs/mocks"
 	"github.com/runatlantis/atlantis/server/events/webhooks"
 	"github.com/runatlantis/atlantis/server/events/yaml"
-	"github.com/runatlantis/atlantis/server/logging"
 	. "github.com/runatlantis/atlantis/testing"
+	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 func TestGitHubWorkflow(t *testing.T) {
@@ -209,7 +209,6 @@ func setupE2E(t *testing.T) (server.EventsController, *vcsmocks.MockClientProxy,
 	e2eGitlabGetter := mocks.NewMockGitlabMergeRequestGetter()
 
 	// Real dependencies.
-	logger := logging.NewSimpleLogger("server", nil, true, logging.Debug)
 	eventParser := &events.EventParser{
 		GithubUser:  "github-user",
 		GithubToken: "github-token",
@@ -266,7 +265,6 @@ func setupE2E(t *testing.T) (server.EventsController, *vcsmocks.MockClientProxy,
 		GitlabMergeRequestGetter: e2eGitlabGetter,
 		CommitStatusUpdater:      e2eStatusUpdater,
 		MarkdownRenderer:         &events.MarkdownRenderer{},
-		Logger:                   logger,
 		AllowForkPRs:             allowForkPRs,
 		AllowForkPRsFlag:         "allow-fork-prs",
 		ProjectCommandBuilder: &events.DefaultProjectCommandBuilder{
@@ -281,6 +279,7 @@ func setupE2E(t *testing.T) (server.EventsController, *vcsmocks.MockClientProxy,
 	}
 
 	ctrl := server.EventsController{
+		Logger:        log.New(),
 		TestingMode:   true,
 		CommandRunner: commandRunner,
 		PullCleaner: &events.PullClosedExecutor{
@@ -288,7 +287,6 @@ func setupE2E(t *testing.T) (server.EventsController, *vcsmocks.MockClientProxy,
 			VCSClient:  e2eVCSClient,
 			WorkingDir: workingDir,
 		},
-		Logger:                       logger,
 		Parser:                       eventParser,
 		CommentParser:                commentParser,
 		GithubWebHookSecret:          nil,
@@ -312,7 +310,7 @@ func (m *mockLockURLGenerator) GenerateLockURL(lockID string) string {
 
 type mockWebhookSender struct{}
 
-func (w *mockWebhookSender) Send(log *logging.SimpleLogger, result webhooks.ApplyResult) error {
+func (w *mockWebhookSender) Send(log log.Logger, result webhooks.ApplyResult) error {
 	return nil
 }
 

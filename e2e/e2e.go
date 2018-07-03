@@ -16,10 +16,11 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"time"
+
+	log "gopkg.in/inconshreveable/log15.v2"
 
 	"github.com/google/go-github/github"
 )
