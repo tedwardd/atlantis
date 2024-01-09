@@ -17,6 +17,7 @@ const PoliciesPassedCommandReq = "policies_passed"
 const PlanRequirementsKey = "plan_requirements"
 const ApplyRequirementsKey = "apply_requirements"
 const ImportRequirementsKey = "import_requirements"
+const StateRequirementsKey = "state_requirements"
 const WorkflowKey = "workflow"
 const AllowedOverridesKey = "allowed_overrides"
 const AllowCustomWorkflowsKey = "allow_custom_workflows"
@@ -72,6 +73,7 @@ type Repo struct {
 	PlanRequirements          []string
 	ApplyRequirements         []string
 	ImportRequirements        []string
+	StateRequirements         []string
 	PreWorkflowHooks          []*WorkflowHook
 	Workflow                  *Workflow
 	PostWorkflowHooks         []*WorkflowHook
@@ -89,6 +91,7 @@ type MergedProjectCfg struct {
 	PlanRequirements          []string
 	ApplyRequirements         []string
 	ImportRequirements        []string
+	StateRequirements         []string
 	Workflow                  Workflow
 	AllowedWorkflows          []string
 	DependsOn                 []string
@@ -211,7 +214,7 @@ func NewGlobalCfgFromArgs(args GlobalCfgArgs) GlobalCfg {
 	customPolicyCheck := false
 	autoDiscover := AutoDiscover{Mode: AutoDiscoverAutoMode}
 	if args.AllowAllRepoSettings {
-		allowedOverrides = []string{PlanRequirementsKey, ApplyRequirementsKey, ImportRequirementsKey, WorkflowKey, DeleteSourceBranchOnMergeKey, RepoLockingKey, PolicyCheckKey}
+		allowedOverrides = []string{PlanRequirementsKey, ApplyRequirementsKey, ImportRequirementsKey, StateRequirementsKey, WorkflowKey, DeleteSourceBranchOnMergeKey, RepoLockingKey, PolicyCheckKey}
 		allowCustomWorkflows = true
 	}
 
@@ -224,6 +227,7 @@ func NewGlobalCfgFromArgs(args GlobalCfgArgs) GlobalCfg {
 				PlanRequirements:          commandReqs,
 				ApplyRequirements:         commandReqs,
 				ImportRequirements:        commandReqs,
+				StateRequirements:         commandReqs,
 				PreWorkflowHooks:          args.PreWorkflowHooks,
 				Workflow:                  &defaultWorkflow,
 				PostWorkflowHooks:         args.PostWorkflowHooks,
@@ -271,7 +275,7 @@ func (r Repo) IDString() string {
 // final config. It assumes that all configs have been validated.
 func (g GlobalCfg) MergeProjectCfg(log logging.SimpleLogging, repoID string, proj Project, rCfg RepoCfg) MergedProjectCfg {
 	log.Debug("MergeProjectCfg started")
-	planReqs, applyReqs, importReqs, workflow, allowedOverrides, allowCustomWorkflows, deleteSourceBranchOnMerge, repoLocking, policyCheck, customPolicyCheck, _ := g.getMatchingCfg(log, repoID)
+	planReqs, applyReqs, importReqs, stateReqs, workflow, allowedOverrides, allowCustomWorkflows, deleteSourceBranchOnMerge, repoLocking, policyCheck, customPolicyCheck, _ := g.getMatchingCfg(log, repoID)
 
 	// If repos are allowed to override certain keys then override them.
 	for _, key := range allowedOverrides {
@@ -295,6 +299,10 @@ func (g GlobalCfg) MergeProjectCfg(log logging.SimpleLogging, repoID string, pro
 			if proj.ImportRequirements != nil {
 				log.Debug("overriding server-defined %s with repo settings: [%s]", ImportRequirementsKey, strings.Join(proj.ImportRequirements, ","))
 				importReqs = proj.ImportRequirements
+			}
+		case StateRequirementsKey:
+			if proj.StateRequirements != nil {
+				log.Debug("overriding server-defined %s with repo settings: [%s]", StateRequirementsKey, strings.Join(proj.StateRequirements, ","))
 			}
 		case WorkflowKey:
 			if proj.WorkflowName != nil {
@@ -352,12 +360,13 @@ func (g GlobalCfg) MergeProjectCfg(log logging.SimpleLogging, repoID string, pro
 	}
 
 	log.Debug("final settings: %s: [%s], %s: [%s], %s: [%s], %s: %s",
-		PlanRequirementsKey, strings.Join(planReqs, ","), ApplyRequirementsKey, strings.Join(applyReqs, ","), ImportRequirementsKey, strings.Join(importReqs, ","), WorkflowKey, workflow.Name)
+		PlanRequirementsKey, strings.Join(planReqs, ","), ApplyRequirementsKey, strings.Join(applyReqs, ","), ImportRequirementsKey, strings.Join(importReqs, ","), StateRequirementsKey, strings.Join(stateReqs, ","), WorkflowKey, workflow.Name)
 
 	return MergedProjectCfg{
 		PlanRequirements:          planReqs,
 		ApplyRequirements:         applyReqs,
 		ImportRequirements:        importReqs,
+		StateRequirements:         stateReqs,
 		Workflow:                  workflow,
 		RepoRelDir:                proj.Dir,
 		Workspace:                 proj.Workspace,
@@ -379,11 +388,12 @@ func (g GlobalCfg) MergeProjectCfg(log logging.SimpleLogging, repoID string, pro
 // repo with id repoID. It is used when there is no repo config.
 func (g GlobalCfg) DefaultProjCfg(log logging.SimpleLogging, repoID string, repoRelDir string, workspace string) MergedProjectCfg {
 	log.Debug("building config based on server-side config")
-	planReqs, applyReqs, importReqs, workflow, _, _, deleteSourceBranchOnMerge, repoLocking, policyCheck, customPolicyCheck, _ := g.getMatchingCfg(log, repoID)
+	planReqs, applyReqs, importReqs, stateReqs, workflow, _, _, deleteSourceBranchOnMerge, repoLocking, policyCheck, customPolicyCheck, _ := g.getMatchingCfg(log, repoID)
 	return MergedProjectCfg{
 		PlanRequirements:          planReqs,
 		ApplyRequirements:         applyReqs,
 		ImportRequirements:        importReqs,
+		StateRequirements:         stateReqs,
 		Workflow:                  workflow,
 		RepoRelDir:                repoRelDir,
 		Workspace:                 workspace,
@@ -443,6 +453,9 @@ func (g GlobalCfg) ValidateRepoCfg(rCfg RepoCfg, repoID string) error {
 		}
 		if p.ImportRequirements != nil && !utils.SlicesContains(allowedOverrides, ImportRequirementsKey) {
 			return fmt.Errorf("repo config not allowed to set '%s' key: server-side config needs '%s: [%s]'", ImportRequirementsKey, AllowedOverridesKey, ImportRequirementsKey)
+		}
+		if p.StateRequirements != nil && !utils.SlicesContains(allowedOverrides, StateRequirementsKey) {
+			return fmt.Errorf("repo config not allowed to set '%s' key: server-side config needs '%s: [%s]'", StateRequirementsKey, AllowedOverridesKey, StateRequirementsKey)
 		}
 		if p.DeleteSourceBranchOnMerge != nil && !utils.SlicesContains(allowedOverrides, DeleteSourceBranchOnMergeKey) {
 			return fmt.Errorf("repo config not allowed to set '%s' key: server-side config needs '%s: [%s]'", DeleteSourceBranchOnMergeKey, AllowedOverridesKey, DeleteSourceBranchOnMergeKey)
@@ -511,7 +524,7 @@ func (g GlobalCfg) ValidateRepoCfg(rCfg RepoCfg, repoID string) error {
 }
 
 // getMatchingCfg returns the key settings for repoID.
-func (g GlobalCfg) getMatchingCfg(log logging.SimpleLogging, repoID string) (planReqs []string, applyReqs []string, importReqs []string, workflow Workflow, allowedOverrides []string, allowCustomWorkflows bool, deleteSourceBranchOnMerge bool, repoLocking bool, policyCheck bool, customPolicyCheck bool, autoDiscover AutoDiscover) {
+func (g GlobalCfg) getMatchingCfg(log logging.SimpleLogging, repoID string) (planReqs []string, applyReqs []string, importReqs []string, stateReqs []string, workflow Workflow, allowedOverrides []string, allowCustomWorkflows bool, deleteSourceBranchOnMerge bool, repoLocking bool, policyCheck bool, customPolicyCheck bool, autoDiscover AutoDiscover) {
 	toLog := make(map[string]string)
 	traceF := func(repoIdx int, repoID string, key string, val interface{}) string {
 		from := "default server config"
@@ -554,6 +567,11 @@ func (g GlobalCfg) getMatchingCfg(log logging.SimpleLogging, repoID string) (pla
 					if repo.ImportRequirements != nil {
 						toLog[ImportRequirementsKey] = traceF(i, repo.IDString(), ImportRequirementsKey, repo.ImportRequirements)
 						importReqs = repo.ImportRequirements
+					}
+				case StateRequirementsKey:
+					if repo.StateRequirements != nil {
+						toLog[StateRequirementsKey] = traceF(i, repo.IDString(), StateRequirementsKey, repo.StateRequirements)
+						stateReqs = repo.StateRequirements
 					}
 				case WorkflowKey:
 					if repo.Workflow != nil {

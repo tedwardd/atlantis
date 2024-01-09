@@ -35,6 +35,9 @@ type ProjectContext struct {
 	// ImportRequirements is the list of requirements that must be satisfied
 	// before we will run the import stage.
 	ImportRequirements []string
+	// StateRequirements is the list of requirements that must be satisfied
+	// before we will run the state stage.
+	StateRequirements []string
 	// AutomergeEnabled is true if automerge is enabled for the repo that this
 	// project is in.
 	AutomergeEnabled bool

@@ -31,6 +31,7 @@ type Project struct {
 	PlanRequirements          []string  `yaml:"plan_requirements,omitempty"`
 	ApplyRequirements         []string  `yaml:"apply_requirements,omitempty"`
 	ImportRequirements        []string  `yaml:"import_requirements,omitempty"`
+	StateRequirements         []string  `yaml:"state_requirements,omitempty"`
 	DependsOn                 []string  `yaml:"depends_on,omitempty"`
 	DeleteSourceBranchOnMerge *bool     `yaml:"delete_source_branch_on_merge,omitempty"`
 	RepoLocking               *bool     `yaml:"repo_locking,omitempty"`
@@ -84,6 +85,7 @@ func (p Project) Validate() error {
 		validation.Field(&p.PlanRequirements, validation.By(validPlanReq)),
 		validation.Field(&p.ApplyRequirements, validation.By(validApplyReq)),
 		validation.Field(&p.ImportRequirements, validation.By(validImportReq)),
+		validation.Field(&p.StateRequirements, validation.By(validStateReq)),
 		validation.Field(&p.TerraformVersion, validation.By(VersionValidator)),
 		validation.Field(&p.DependsOn, validation.By(DependsOn)),
 		validation.Field(&p.Name, validation.By(validName)),
@@ -126,6 +128,7 @@ func (p Project) ToValid() valid.Project {
 	v.PlanRequirements = p.PlanRequirements
 	v.ApplyRequirements = p.ApplyRequirements
 	v.ImportRequirements = p.ImportRequirements
+	v.StateRequirements = p.StateRequirements
 
 	v.Name = p.Name
 
@@ -188,6 +191,16 @@ func validImportReq(value interface{}) error {
 	for _, r := range reqs {
 		if r != ApprovedRequirement && r != MergeableRequirement && r != UnDivergedRequirement {
 			return fmt.Errorf("%q is not a valid import_requirement, only %q, %q and %q are supported", r, ApprovedRequirement, MergeableRequirement, UnDivergedRequirement)
+		}
+	}
+	return nil
+}
+
+func validStateReq(value interface{}) error {
+	reqs := value.([]string)
+	for _, r := range reqs {
+		if r != ApprovedRequirement && r != MergeableRequirement && r != UnDivergedRequirement {
+			return fmt.Errorf("%q is not a valid state_requirement, only %q, %q and %q are supported", r, ApprovedRequirement, MergeableRequirement, UnDivergedRequirement)
 		}
 	}
 	return nil

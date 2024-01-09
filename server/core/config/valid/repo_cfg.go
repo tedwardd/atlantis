@@ -151,6 +151,7 @@ type Project struct {
 	PlanRequirements          []string
 	ApplyRequirements         []string
 	ImportRequirements        []string
+	StateRequirements         []string
 	DependsOn                 []string
 	DeleteSourceBranchOnMerge *bool
 	RepoLocking               *bool

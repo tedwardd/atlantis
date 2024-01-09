@@ -15,6 +15,7 @@ type CommandRequirementHandler interface {
 	ValidatePlanProject(repoDir string, ctx command.ProjectContext) (string, error)
 	ValidateApplyProject(repoDir string, ctx command.ProjectContext) (string, error)
 	ValidateImportProject(repoDir string, ctx command.ProjectContext) (string, error)
+	ValidateStateProject(repoDir string, ctx command.ProjectContext) (string, error)
 }
 
 type DefaultCommandRequirementHandler struct {
@@ -66,6 +67,23 @@ func (a *DefaultCommandRequirementHandler) ValidateApplyProject(repoDir string, 
 		}
 	}
 	// Passed all apply requirements configured.
+	return "", nil
+}
+
+func (a *DefaultCommandRequirementHandler) ValidateStateProject(repoDir string, ctx command.ProjectContext) (failure string, err error) {
+	for _, req := range ctx.StateRequirements {
+		switch req {
+		case raw.ApprovedRequirement:
+			if !ctx.PullReqStatus.ApprovalStatus.IsApproved {
+				return "Pull request must be approved according to the project's approval rules before running a state command.", nil
+			}
+		case valid.PoliciesPassedCommandReq:
+			// We should rely on this function instead of plan status, since plan status after a failed apply will not carry the policy error over.
+			if !ctx.PolicyCleared() {
+				return "All policies must pass for project before running state command.", nil
+			}
+		}
+	}
 	return "", nil
 }
 

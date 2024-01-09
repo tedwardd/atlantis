@@ -26,6 +26,7 @@ type Repo struct {
 	PlanRequirements          []string       `yaml:"plan_requirements" json:"plan_requirements"`
 	ApplyRequirements         []string       `yaml:"apply_requirements" json:"apply_requirements"`
 	ImportRequirements        []string       `yaml:"import_requirements" json:"import_requirements"`
+	StateRequirements         []string       `yaml:"state_requirements" json:"state_requirements"`
 	PreWorkflowHooks          []WorkflowHook `yaml:"pre_workflow_hooks" json:"pre_workflow_hooks"`
 	Workflow                  *string        `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	PostWorkflowHooks         []WorkflowHook `yaml:"post_workflow_hooks" json:"post_workflow_hooks"`
@@ -112,6 +113,8 @@ func (g GlobalCfg) ToValid(defaultCfg valid.GlobalCfg) valid.GlobalCfg {
 	}
 	globalImportReqs := defaultCfg.Repos[0].ImportRequirements
 
+	globalStateReqs := defaultCfg.Repos[0].StateRequirements
+
 	for k, v := range g.Workflows {
 		validatedWorkflow := v.ToValid(k)
 		workflows[k] = validatedWorkflow
@@ -131,7 +134,7 @@ func (g GlobalCfg) ToValid(defaultCfg valid.GlobalCfg) valid.GlobalCfg {
 
 	var repos []valid.Repo
 	for _, r := range g.Repos {
-		repos = append(repos, r.ToValid(workflows, globalPlanReqs, globalApplyReqs, globalImportReqs))
+		repos = append(repos, r.ToValid(workflows, globalPlanReqs, globalApplyReqs, globalImportReqs, globalStateReqs))
 	}
 	repos = append(defaultCfg.Repos, repos...)
 
@@ -194,8 +197,8 @@ func (r Repo) Validate() error {
 	overridesValid := func(value interface{}) error {
 		overrides := value.([]string)
 		for _, o := range overrides {
-			if o != valid.PlanRequirementsKey && o != valid.ApplyRequirementsKey && o != valid.ImportRequirementsKey && o != valid.WorkflowKey && o != valid.DeleteSourceBranchOnMergeKey && o != valid.RepoLockingKey && o != valid.PolicyCheckKey && o != valid.CustomPolicyCheckKey {
-				return fmt.Errorf("%q is not a valid override, only %q, %q, %q, %q, %q, %q, %q, and %q are supported", o, valid.PlanRequirementsKey, valid.ApplyRequirementsKey, valid.ImportRequirementsKey, valid.WorkflowKey, valid.DeleteSourceBranchOnMergeKey, valid.RepoLockingKey, valid.PolicyCheckKey, valid.CustomPolicyCheckKey)
+			if o != valid.PlanRequirementsKey && o != valid.ApplyRequirementsKey && o != valid.ImportRequirementsKey && o != valid.StateRequirementsKey && o != valid.WorkflowKey && o != valid.DeleteSourceBranchOnMergeKey && o != valid.RepoLockingKey && o != valid.PolicyCheckKey && o != valid.CustomPolicyCheckKey {
+				return fmt.Errorf("%q is not a valid override, only %q, %q, %q, %q, %q, %q, %q, %q, and %q are supported", o, valid.PlanRequirementsKey, valid.ApplyRequirementsKey, valid.ImportRequirementsKey, valid.StateRequirementsKey, valid.WorkflowKey, valid.DeleteSourceBranchOnMergeKey, valid.RepoLockingKey, valid.PolicyCheckKey, valid.CustomPolicyCheckKey)
 			}
 		}
 		return nil
@@ -228,13 +231,14 @@ func (r Repo) Validate() error {
 		validation.Field(&r.PlanRequirements, validation.By(validPlanReq)),
 		validation.Field(&r.ApplyRequirements, validation.By(validApplyReq)),
 		validation.Field(&r.ImportRequirements, validation.By(validImportReq)),
+		validation.Field(&r.StateRequirements, validation.By(validStateReq)),
 		validation.Field(&r.Workflow, validation.By(workflowExists)),
 		validation.Field(&r.DeleteSourceBranchOnMerge, validation.By(deleteSourceBranchOnMergeValid)),
 		validation.Field(&r.AutoDiscover, validation.By(autoDiscoverValid)),
 	)
 }
 
-func (r Repo) ToValid(workflows map[string]valid.Workflow, globalPlanReqs []string, globalApplyReqs []string, globalImportReqs []string) valid.Repo {
+func (r Repo) ToValid(workflows map[string]valid.Workflow, globalPlanReqs []string, globalApplyReqs []string, globalImportReqs []string, GlobalStateReqs []string) valid.Repo {
 	var id string
 	var idRegex *regexp.Regexp
 	if r.HasRegexID() {
@@ -280,6 +284,8 @@ func (r Repo) ToValid(workflows map[string]valid.Workflow, globalPlanReqs []stri
 	mergedApplyReqs = append(mergedApplyReqs, r.ApplyRequirements...)
 	var mergedImportReqs []string
 	mergedImportReqs = append(mergedImportReqs, r.ImportRequirements...)
+	var mergedStateReqs []string
+	mergedStateReqs = append(mergedStateReqs, r.StateRequirements...)
 
 	// only add global reqs if they don't exist already.
 OuterGlobalPlanReqs:
@@ -324,6 +330,18 @@ OuterGlobalImportReqs:
 		}
 		mergedImportReqs = append(mergedImportReqs, globalReq)
 	}
+OuterGlobalStateReqs:
+	for _, globalReq := range GlobalStateReqs {
+		for _, currReq := range r.StateRequirements {
+			if globalReq == currReq {
+				continue OuterGlobalStateReqs
+			}
+		}
+		if globalReq == valid.PoliciesPassedCommandReq && r.PolicyCheck != nil && !*r.PolicyCheck {
+			continue
+		}
+		mergedStateReqs = append(mergedStateReqs, globalReq)
+	}
 
 	var autoDiscover *valid.AutoDiscover
 	if r.AutoDiscover != nil {
@@ -338,6 +356,7 @@ OuterGlobalImportReqs:
 		PlanRequirements:          mergedPlanReqs,
 		ApplyRequirements:         mergedApplyReqs,
 		ImportRequirements:        mergedImportReqs,
+		StateRequirements:         mergedStateReqs,
 		PreWorkflowHooks:          preWorkflowHooks,
 		Workflow:                  workflow,
 		PostWorkflowHooks:         postWorkflowHooks,
